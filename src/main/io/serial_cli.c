@@ -181,6 +181,11 @@ static const rxFailsafeChannelMode_e rxFailsafeModesTable[RX_FAILSAFE_TYPE_COUNT
     { RX_FAILSAFE_MODE_INVALID, RX_FAILSAFE_MODE_HOLD, RX_FAILSAFE_MODE_SET }
 };
 
+// sync this with pidControllerType_e
+static const char * const pidControllers[] = {
+    "MULTIWII23", "PIDREWRITE", "LUXFLOAT", "HARAKIRI", NULL
+};
+
 #ifndef CJMCU
 // sync this with sensors_e
 static const char * const sensorTypeNames[] = {
@@ -471,7 +476,7 @@ const clivalue_t valueTable[] = {
     { "mag_hardware",               VAR_UINT8  | MASTER_VALUE,  &masterConfig.mag_hardware, 0, MAG_MAX },
     { "mag_declination",            VAR_INT16  | PROFILE_VALUE, &masterConfig.profile[0].mag_declination, -18000, 18000 },
 
-    { "pid_controller",             VAR_UINT8  | PROFILE_VALUE, &masterConfig.profile[0].pidProfile.pidController, 0, 5 },
+    { "pid_controller",             VAR_UINT8  | PROFILE_VALUE, &masterConfig.profile[0].pidProfile.pidController, 0, 3 },
 
     { "p_pitch",                    VAR_UINT8  | PROFILE_VALUE, &masterConfig.profile[0].pidProfile.P8[PITCH], 0, 200 },
     { "i_pitch",                    VAR_UINT8  | PROFILE_VALUE, &masterConfig.profile[0].pidProfile.I8[PITCH], 0, 200 },
@@ -1404,7 +1409,13 @@ static void dumpValues(uint16_t mask)
         }
 
         printf("set %s = ", valueTable[i].name);
-        cliPrintVar(value, 0);
+
+        if (strstr(valueTable[i].name, "pid_controller")) {
+            cliPrint(pidControllers[*(uint8_t *)valueTable[i].ptr]);
+        } else {
+            cliPrintVar(value, 0);
+        }
+
         cliPrint("\r\n");
     }
 }
@@ -2042,9 +2053,43 @@ static void cliSet(char *cmdline)
         valuef = fastA2F(eqptr);
         for (i = 0; i < VALUE_COUNT; i++) {
             val = &valueTable[i];
-            // ensure exact match when setting to prevent setting variables with shorter names
-            if (strncasecmp(cmdline, valueTable[i].name, strlen(valueTable[i].name)) == 0 && variableNameLength == strlen(valueTable[i].name)) {
-                if (valuef >= valueTable[i].min && valuef <= valueTable[i].max) { // here we compare the float value since... it should work, RIGHT?
+            if (strstr(valueTable[i].name, "pid_controller")) {
+                int_float_value_t tmp;
+                tmp.int_value = 0;
+                bool pidNameSet = false;
+
+                for (int pid = 0; pid < PID_COUNT; pid++) {
+                    if (strstr(eqptr, pidControllers[pid])) {
+                        tmp.int_value = pid;
+                        cliSetVar(val, tmp);
+                        printf("%s set to %s ", valueTable[i].name, pidControllers[tmp.int_value]);
+                        printf("(Available PID Controllers: ");
+                        for (int pid = 0; pid < PID_COUNT; pid++) {
+                            printf(pidControllers[pid]);
+                            printf(" ");
+                        }
+                        printf(")\r\n");
+                        pidNameSet = true;
+                        break;
+                    }
+                }
+
+                if ((value >= valueTable[i].min && value <= valueTable[i].max) && !(pidNameSet)) {
+                	tmp.int_value = value;
+                    cliSetVar(val, tmp);
+                    printf("%s set to %s ", valueTable[i].name, pidControllers[tmp.int_value]);
+                    printf("(Available PID Controllers: ");
+                    for (int pid = 0; pid < PID_COUNT; pid++) {
+                        printf(pidControllers[pid]);
+                        printf(" ");
+                    }
+                    printf(")\r\n");
+                }
+
+                return;
+            } else if (strncasecmp(cmdline, valueTable[i].name, strlen(valueTable[i].name)) == 0 && variableNameLength == strlen(valueTable[i].name)) {
+                // ensure exact match when setting to prevent setting variables with shorter names
+            	if (valuef >= valueTable[i].min && valuef <= valueTable[i].max) { // here we compare the float value since... it should work, RIGHT?
                     int_float_value_t tmp;
                     if (valueTable[i].type & VAR_FLOAT)
                         tmp.float_value = valuef;
@@ -2076,7 +2121,13 @@ static void cliGet(char *cmdline)
         if (strstr(valueTable[i].name, cmdline)) {
             val = &valueTable[i];
             printf("%s = ", valueTable[i].name);
-            cliPrintVar(val, 0);
+
+        	if (strstr(valueTable[i].name, "pid_controller")) {
+                cliPrint(pidControllers[*(uint8_t *)valueTable[i].ptr]);
+        	} else {
+                cliPrintVar(val, 0);
+        	}
+
             cliPrint("\r\n");
 
             matchedCommands++;
