@@ -44,6 +44,8 @@ typedef enum {
 #define BEEPER_OFF_FLAGS_MAX  ((1 << (BEEPER_CASE_MAX - 1)) - 1)
 
 typedef struct beeperOffConditions_t {
+    uint8_t vbat_min;
+    uint8_t vbat_max;
     uint32_t flags;
 } beeperOffConditions_t;
 
